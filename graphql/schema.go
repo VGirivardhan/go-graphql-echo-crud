@@ -2,9 +2,10 @@ package graphql
 
 import (
 	"context"
-	"github.com/graphql-go/graphql"
 	"go-graphql-echo-crud/db"
 	"go-graphql-echo-crud/models"
+
+	"github.com/graphql-go/graphql"
 )
 
 var userType = graphql.NewObject(
@@ -47,6 +48,56 @@ var rootQuery = graphql.NewObject(
 	},
 )
 
+var updateUserMutation = &graphql.Field{
+	Type: userType,
+	Args: graphql.FieldConfigArgument{
+		"id":    &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+		"name":  &graphql.ArgumentConfig{Type: graphql.String},
+		"email": &graphql.ArgumentConfig{Type: graphql.String},
+	},
+	Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+		id := params.Args["id"].(int)
+		name, nameOk := params.Args["name"].(string)
+		email, emailOk := params.Args["email"].(string)
+
+		if nameOk && emailOk {
+			_, err := db.Pool.Exec(context.Background(), "UPDATE users SET name=$1, email=$2 WHERE id=$3", name, email, id)
+			if err != nil {
+				return nil, err
+			}
+		} else if nameOk {
+			_, err := db.Pool.Exec(context.Background(), "UPDATE users SET name=$1 WHERE id=$2", name, id)
+			if err != nil {
+				return nil, err
+			}
+		} else if emailOk {
+			_, err := db.Pool.Exec(context.Background(), "UPDATE users SET email=$1 WHERE id=$2", email, id)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return models.User{ID: id, Name: name, Email: email}, nil
+	},
+}
+
+var deleteUserMutation = &graphql.Field{
+	Type: graphql.Boolean,
+	Args: graphql.FieldConfigArgument{
+		"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+	},
+	Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+		id := params.Args["id"].(int)
+
+		_, err := db.Pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", id)
+		if err != nil {
+			return nil, err
+		}
+
+		return true, nil
+	},
+}
+
 var mutation = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "RootMutation",
@@ -69,6 +120,8 @@ var mutation = graphql.NewObject(
 					return models.User{Name: name, Email: email}, nil
 				},
 			},
+			"updateUser": updateUserMutation,
+			"deleteUser": deleteUserMutation,
 		},
 	},
 )
